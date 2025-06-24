@@ -164,7 +164,7 @@ class Strategy(metaclass=ABCMeta):
                 f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}" '
                 f'shape: {getattr(value, "shape", "")}, returned value: {value})')
 
-        if plot and overlay is None and np.issubdtype(value.dtype, np.number):
+        if overlay is None and np.issubdtype(value.dtype, np.number):
             x = value / self._data.Close
             # By default, overlay if strong majority of indicator values
             # is within 30% of Close
@@ -671,15 +671,22 @@ class Trade:
 
     @property
     def pl(self):
-        """Trade profit (positive) or loss (negative) in cash units."""
+        """
+        Trade profit (positive) or loss (negative) in cash units.
+        Commissions are reflected only after the Trade is closed.
+        """
         price = self.__exit_price or self.__broker.last_price
-        return self.__size * (price - self.__entry_price)
+        return (self.__size * (price - self.__entry_price)) - self._commissions
 
     @property
     def pl_pct(self):
         """Trade profit (positive) or loss (negative) in percent."""
         price = self.__exit_price or self.__broker.last_price
-        return copysign(1, self.__size) * (price / self.__entry_price - 1)
+        gross_pl_pct = copysign(1, self.__size) * (price / self.__entry_price - 1)
+
+        # Total commission across the entire trade size to individual units
+        commission_pct = self._commissions / (abs(self.__size) * self.__entry_price)
+        return gross_pl_pct - commission_pct
 
     @property
     def value(self):
@@ -1218,8 +1225,9 @@ class Backtest:
                              'fill them in with `df.interpolate()` or whatever.')
         if np.any(data['Close'] > cash):
             warnings.warn('Some prices are larger than initial cash value. Note that fractional '
-                          'trading is not supported. If you want to trade Bitcoin, '
-                          'increase initial cash, or trade μBTC or satoshis instead (GH-134).',
+                          'trading is not supported by this class. If you want to trade Bitcoin, '
+                          'increase initial cash, or trade μBTC or satoshis instead (see e.g. class '
+                          '`backtesting.lib.FractionalBacktest`.',
                           stacklevel=2)
         if not data.index.is_monotonic_increasing:
             warnings.warn('Data index is not sorted in ascending order. Sorting.',
