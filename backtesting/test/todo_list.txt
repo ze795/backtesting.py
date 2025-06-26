@@ -1,0 +1,4 @@
+feidao
+
+improve:
+ filter range and trend, by past window's four rev-point, when break line and leave from window its trend, when its in window, its range

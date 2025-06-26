@@ -126,7 +126,7 @@ class FeiDao(Strategy):
             target = cur - 3 * loss
             # self.sell(tp=target, sl=stop_price, tag=(cur, loss))
             # print("save: "+ str(cur) + " " + str(loss) + " " + str(target))
-            self.sell(sl=stop_price, limit=limit, tag=(cur, loss))
+            self.sell(size=1, sl=stop_price, limit=limit, tag=(cur, loss))
 
         # ---------------------------------------------------------------------------------------------
         # 多单
@@ -147,7 +147,7 @@ class FeiDao(Strategy):
             loss = cur - stop_price
             target = cur + 2 * loss
             # self.buy(sl=stop_price, tp=target)
-            self.buy(sl=stop_price, limit=limit, tag=(cur, loss))
+            self.buy(size=1, sl=stop_price, limit=limit, tag=(cur, loss))
 
     def handle_pos(self):
         if not self.position:
@@ -183,7 +183,7 @@ class FeiDao(Strategy):
                     new_sl = in_p - risk
                     trade.sl = min(trade.sl or -np.inf, new_sl)
                 elif past_max_profit >= 2 * risk:
-                    print("into 2R")
+                    # print("into 2R")
                     new_sl = in_p
                     trade.sl = min(trade.sl or -np.inf, new_sl)
 
@@ -222,19 +222,22 @@ def _read_file(filename):
                        index_col=0, parse_dates=True)
 
 if __name__ == '__main__':
-    CY_1M = _read_file('RB0_dayK.csv')[-1000:]
+    CY_1M = _read_file('RB0_dayK.csv')[:]
     # CY_1M = _read_file('CY_1M.csv')
     bt = Backtest(CY_1M, FeiDao, hedging=True)
     # bt = Backtest(BTCUSD, SmaCross)
     stats = bt.run()
     trades = stats['_trades']
     print(stats)
+    day_curve = stats.loc['_equity_curve']
+    print(day_curve)
     # bt.plot()
     # pd.set_option('display.max_columns', 30)
 
     # print(type(trades))
     # print(repr(trades[:10]))
     trades.to_excel('output.xlsx', sheet_name='Sheet1', index=False)
+    day_curve.to_excel('day_curve.xlsx', sheet_name='Sheet1', index=False)
 
 
 # long ?
