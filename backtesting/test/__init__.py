@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
-
+import numpy as np
 
 def _read_file(filename):
     from os.path import dirname, join
@@ -27,3 +27,12 @@ def SMA(arr: pd.Series, n: int) -> pd.Series:
     Returns `n`-period simple moving average of array `arr`.
     """
     return pd.Series(arr).rolling(n).mean()
+
+def ATR(High, Low, Close, periods: int) -> pd.Series:
+    hi, lo, c_prev = High, Low, pd.Series(Close).shift(1)
+    tr = np.max([hi - lo, (c_prev - hi).abs(), (c_prev - lo).abs()], axis=0)
+    atr = pd.Series(tr).rolling(periods).mean()
+    """
+    Returns `n`-period simple moving average of array `arr`.
+    """
+    return atr, tr

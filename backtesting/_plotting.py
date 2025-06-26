@@ -111,7 +111,7 @@ def lightness(color, lightness=.94):
 
 
 _MAX_CANDLES = 10_000
-_INDICATOR_HEIGHT = 50
+_INDICATOR_HEIGHT = 100
 
 
 def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
@@ -265,7 +265,8 @@ def plot(*, results: pd.Series,
         returns_positive=(trades['ReturnPct'] > 0).astype(int).astype(str),
     ))
 
-    inc_cmap = factor_cmap('inc', COLORS, ['0', '1'])
+    # inc_cmap = factor_cmap('inc', COLORS, ['0', '1'])
+    inc_cmap = factor_cmap('inc', COLORS, ['1', '0'])
     cmap = factor_cmap('returns_positive', COLORS, ['0', '1'])
     colors_darker = [lightness(BEAR_COLOR, .35),
                      lightness(BULL_COLOR, .35)]
