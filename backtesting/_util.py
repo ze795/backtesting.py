@@ -335,3 +335,33 @@ class SharedMemoryManager:
         df.set_index(SharedMemoryManager._DF_INDEX_COL, drop=True, inplace=True)
         df.index.name = None
         return df, shm
+
+
+class TrendUtils:
+    @classmethod
+    def tr_bypoint(cls, data: _Data):
+        df = data.df
+        # 1. find past four point
+        upoint = []
+        dpoint = []
+        for idx, row in df.iloc[::-1].iterrows():
+            # traverse the former two and latter two
+            if idx > 50:
+                break
+
+        return
+
+    @classmethod
+    def tr_byma(cls, data: _Data):
+        pass
+
+def MACD(df, n_fast, n_slow):
+    EMAfast = Series(ewma(df['Close'], span = n_fast, min_periods = n_slow - 1))
+    EMAslow = Series(ewma(df['Close'], span = n_slow, min_periods = n_slow - 1))
+    MACD = Series(EMAfast - EMAslow, name = 'MACD_' + str(n_fast) + '_' + str(n_slow))
+    MACDsign = Series(ewma(MACD, span = 9, min_periods = 8), name = 'MACDsign_' + str(n_fast) + '_' + str(n_slow))
+    MACDdiff = Series(MACD - MACDsign, name = 'MACDdiff_' + str(n_fast) + '_' + str(n_slow))
+    df = df.join(MACD)
+    df = df.join(MACDsign)
+    df = df.join(MACDdiff)
+    return df
