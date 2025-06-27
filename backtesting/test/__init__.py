@@ -35,4 +35,5 @@ def ATR(High, Low, Close, periods: int) -> pd.Series:
     """
     Returns `n`-period simple moving average of array `arr`.
     """
+
     return atr, tr
