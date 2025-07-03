@@ -108,6 +108,8 @@ class Boll_TL(Strategy):
         cur_lower = self.lower[-1]
         cur_upper = self.upper[-1]
         cur_index = self.data.index[-1]
+        cur_up = self.data.Close[-1] > self.data.Open[-1]
+        cur_down = self.data.Close[-1] < self.data.Open[-1]
 
         if self.position:
             # if we close pos?
@@ -125,13 +127,13 @@ class Boll_TL(Strategy):
         if self.position:
             return
         direction = self.flat()
-        if direction == 1:
+        if direction == 1 and cur_up:
             # limit = cur_mean
             limit = cur_lower
             stop_p = limit - 1.0 * (cur_mean - cur_lower)
             self.buy(size=1, sl=stop_p, limit=limit, tag=(cur_index, 0))
             # print(1, cur_upper, cur_mean, cur_lower, cur_index, stop_p)
-        elif direction == -1:
+        elif direction == -1 and cur_down:
             # limit = cur_mean
             limit = cur_upper
             stop_p = limit + 1.0 *  (cur_upper - cur_mean)
