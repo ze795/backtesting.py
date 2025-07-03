@@ -75,11 +75,15 @@ class FengYun(Strategy):
     def init(self):
         self.window_length = 5
         self.ma60 = self.I(SMA, self.data.Close, 60) # or EMA
+        self.ma20 = self.I(SMA, self.data.Close, 20) # or EMA
         self.v5 = self.I(SMA, self.data.Volume, 5) # or EMA
         self.atr, self.tr = self.I(ATR, self.data.High, self.data.Low, self.data.Close, 14)
 
     def is_red(self, data_index):
         return self.data.Close[data_index] > self.data.Open[data_index]
+
+    def is_green(self, data_index):
+        return self.data.Close[data_index] < self.data.Open[data_index]
 
     def filter_window(self):
         is_pass = True
@@ -90,7 +94,7 @@ class FengYun(Strategy):
         first_k_vol = self.data.Volume[first_index]
         first_box_cond = first_k_box / first_k_minmax > 0.7
         first_atr_cond = self.tr[first_index] > 1.0 * self.atr[first_index]
-        if first_box_cond and first_atr_cond and first_k_vol > 1.5 * self.v5[first_index-1]:
+        if first_box_cond and first_atr_cond and first_k_vol > 0.8 * self.v5[first_index-1]:
             is_pass = is_pass and True
 
         last_index = -1
@@ -98,8 +102,8 @@ class FengYun(Strategy):
         last_k_minmax = abs(self.data.High[last_index] - self.data.Low[last_index])
         last_k_vol = self.data.Volume[last_index]
         last_box_cond = last_k_box / last_k_minmax > 0.7
-        last_atr_cond = self.tr[last_index] > 1.5 * self.atr[last_index]
-        if last_box_cond and last_atr_cond and last_k_vol > 2 * self.v5[last_index-1]:
+        last_atr_cond = self.tr[last_index] > 1.2 * self.atr[last_index]
+        if last_box_cond and last_atr_cond and last_k_vol > 1.2 * self.v5[last_index-1]:
             is_pass = is_pass and True
 
         range_min, range_max = min(self.data.Low[first_index], self.data.Low[last_index]), \
@@ -116,7 +120,7 @@ class FengYun(Strategy):
         # 2 shangsheng sanfa
         if self.is_red(first_index) and self.is_red(last_index) and is_pass:
             return 1
-        elif self.is_red(first_index) == 0 and self.is_red(last_index) == 0 and is_pass:
+        elif self.is_green(first_index) and self.is_green(last_index) and is_pass:
             return -1
         return 0
 
@@ -128,26 +132,31 @@ class FengYun(Strategy):
         if self.position:
             return
         # 1 maline
-        short_cond1 = all(self.data.Close[-i] < self.ma60[-i] for i in range(1, 5))
-        long_cond1 = all(self.data.Close[-i] > self.ma60[-i] for i in range(1, 5))
+        short_cond1 = all(self.data.Close[-i] < self.ma20[-i] for i in range(1, 5)) \
+            and all(self.data.Close[-i] < self.ma60[-i] for i in range(1, 5))
+        long_cond1 = all(self.data.Close[-i] > self.ma20[-i] for i in range(1, 5)) \
+            and all(self.data.Close[-i] > self.ma60[-i] for i in range(1, 5))
+        # short_cond1 = all(self.data.Close[-i] < self.ma60[-i] for i in range(1, 5))
+        # long_cond1 = all(self.data.Close[-i] > self.ma60[-i] for i in range(1, 5))
+
         # get window and filter it
         # 2 first and last: box\atr\vol
         limit = None
         tp = None
         cur_p, index = self.data.Close[-1], self.data.index[-1]
-        if self.filter_window() == 1:
+        if self.filter_window() == 1 and long_cond1:
             stop_p = self.data.Low[-1]
             # stop_p = cur_p - 1.0 * self.atr[-1]
             loss = cur_p - stop_p
-            tp = cur_p + 1 * loss
+            tp = cur_p + 2 * loss
             self.buy(size=1, sl=stop_p, limit=limit, tp=tp, tag=(index, cur_p, loss))
-        elif self.filter_window() == -1:
+        elif self.filter_window() == -1 and short_cond1:
             stop_p = self.data.High[-1]
             # stop_p = cur_p + 1.0 * self.atr[-1]
             # stop_p = max(self.data.High[-2:]) + 1
             index = self.data.index[-1]
             loss = stop_p - cur_p
-            tp = cur_p - 1 * loss
+            tp = cur_p - 2 * loss
             self.sell(size=1, sl=stop_p, limit=limit, tp=tp, tag=(index, cur_p, loss))
 
     def handle_pos(self):
@@ -191,10 +200,13 @@ class FengYun(Strategy):
 class SingleK(Strategy):
     def init(self):
         self.window_length = 5
-        self.p60 = self.I(SMA, self.data.Close, 60) # or EMA
+        self.m60 = self.I(SMA, self.data.Close, 60) # or EMA
+        self.m20 = self.I(SMA, self.data.Close, 20) # or EMA
         self.v5 = self.I(SMA, self.data.Volume, 5) # or EMA
+        self.v3 = self.I(SMA, self.data.Volume, 3) # or EMA
         self.atr, self.tr = self.I(ATR, self.data.High, self.data.Low, self.data.Close, 14)
         self.timeloss = 30
+        self.ma_len = 30
 
     def handle_ops(self):
         cur_index = self.data.index[-1]
@@ -211,26 +223,36 @@ class SingleK(Strategy):
         if self.position:
             return
 
+        long_cond1 = all(self.m20[-i] > self.m60[-i] for i in range(1, self.ma_len))
+        over_m20 = [self.data.Close[-i] > self.m20[-i] for i in range(1, self.ma_len)]
+        over_m20_prop = sum(1 for x in over_m20 if x == 1) / len(over_m20)
+        long_cond2 = over_m20_prop > 0.7
+
+        short_cond1 = all(self.m20[-i] < self.m60[-i] for i in range(1, self.ma_len))
+        over_m20 = [self.data.Close[-i] < self.m20[-i] for i in range(1, self.ma_len)]
+        over_m20_prop = sum(1 for x in over_m20 if x == 1) / len(over_m20)
+        short_cond2 = over_m20_prop > 0.7
+
         red = self.data.Close[-1] > self.data.Open[-1]
         box = abs(self.data.Close[-1] - self.data.Open[-1])
         minmax = abs(self.data.High[-1] - self.data.Low[-1])
         box_prop = box / minmax
         vol = self.data.Volume[-1]
-        if (box_prop > 0.8) and (vol > self.v5[-1] * 1.5) and (self.tr[-1] > 1.5 * self.atr[-1]) and not self.position:
+        if (box_prop > 0.8) and (vol > self.v3[-1] * 1.2) and (self.tr[-1] > 1.5 * self.atr[-1]) and not self.position:
         # if not self.position:
             cur_p = self.data.Close[-1]
             limit = None
-            if red:
+            if red and long_cond1 and long_cond2:
                 stop_p = min(self.data.Low[-2:]) - 1
                 index = self.data.index[-1]
                 loss = cur_p - stop_p
-                tp = cur_p + 1 * loss
+                tp = cur_p + 2
                 self.buy(size=1, sl=stop_p, limit=limit, tp=tp, tag=(index, cur_p))
-            else:
+            elif red == 0 and short_cond1 and short_cond2:
                 stop_p = max(self.data.High[-2:]) + 1
                 index = self.data.index[-1]
                 loss = stop_p - cur_p
-                tp = cur_p - 1 * loss
+                tp = cur_p - 2
                 self.sell(size=1, sl=stop_p, limit=limit, tp=tp, tag=(index, cur_p))
 
 
@@ -248,7 +270,7 @@ def _read_file(filename):
 if __name__ == '__main__':
     CY_1M = _read_file('RB0_dayK.csv')[:]
     CY_1M = _read_file('CY_1M.csv')
-    bt = Backtest(CY_1M, FengYun, hedging=True)
+    bt = Backtest(CY_1M, SingleK, hedging=True)
     # bt = Backtest(BTCUSD, SmaCross)
     stats = bt.run()
     trades = stats['_trades']

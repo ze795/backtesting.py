@@ -34,8 +34,16 @@ from backtesting.lib import (
     random_ohlc_data,
     resample_apply,
 )
-from backtesting.test import BTCUSD, EURUSD, GOOG, SMA, ATR
+from backtesting.test import BTCUSD, EURUSD, GOOG, SMA
+def ATR(High, Low, Close, periods: int) -> pd.Series:
+    hi, lo, c_prev = High, Low, pd.Series(Close).shift(1)
+    tr = np.max([hi - lo, (c_prev - hi).abs(), (c_prev - lo).abs()], axis=0)
+    atr = pd.Series(tr).rolling(periods).mean()
+    """
+    Returns `n`-period simple moving average of array `arr`.
+    """
 
+    return atr, tr
 
 SHORT_DATA = GOOG.iloc[:20]  # Short data for fast tests with no indicator lag
 
@@ -86,14 +94,14 @@ class FeiDao(Strategy):
     def next(self):
         if len(self.data.Close) < 5:  # 确保有足够的数据
             return
-        
+
         # self.handle_orders()
         self.handle_pos()
 
         # 是否策略自然加仓？
         # if self.position:
         #     return
-        
+
         # 必须条件：atr > 0.6
         if self.tr[-1] < 0.6 * self.atr[-1]:
             return
@@ -103,13 +111,13 @@ class FeiDao(Strategy):
 
         # 条件1：最近N1天的K线都在M60以下
         short_cond1 = all(self.data.Close[-i] < self.ma60[-i] for i in range(1, 5))
-        
+
         # 条件2：最近N2天的收盘价满足特定关系
         c0, c1, c2, c3, c4 = self.data.Close[-5], self.data.Close[-4], \
             self.data.Close[-3], self.data.Close[-2], self.data.Close[-1]
         cur = self.data.Close[-1]
         if day_n == 4:
-            short_cond2 = (c3 > (c2) > (c1) > (c0)) and (c4 < c3) 
+            short_cond2 = (c3 > (c2) > (c1) > (c0)) and (c4 < c3)
             # short_cond2 = c3 >= (c2 + self.atr[-1] * 0.1)  and c2 >= (c1 + self.atr[-1] * 0.1) and c1 >= (c0 + self.atr[-1] * 0.1)
         elif day_n == 3:
             short_cond2 = (c3 > c2 > c1) and (c4 < c3)
@@ -187,7 +195,7 @@ class FeiDao(Strategy):
                     # print("into 2R")
                     new_sl = in_p
                     trade.sl = min(trade.sl or -np.inf, new_sl)
-    
+
     def handle_pos1(self):
         if not self.position:
             return
@@ -236,16 +244,16 @@ def _read_file(filename):
 
 if __name__ == '__main__':
     CY_1M = _read_file('RB0_dayK.csv')[-1000:]
-    CY_1M = _read_file('../../../data/FG0.csv')[-10000:]
+    # CY_1M = _read_file('../../../data/FG0.csv')[-10000:]
     # CY_1M = _read_file('CY_1M.csv')
     bt = Backtest(CY_1M, FeiDao, hedging=True)
-    # bt = Backtest(BTCUSD, SmaCross)
+    # bt = Backtest(GOOG, FeiDao)
     stats = bt.run()
     trades = stats['_trades']
     print(stats)
     day_curve = stats.loc['_equity_curve']
     print(day_curve)
-    bt.plot(filename="output.html")
+    # bt.plot(filename="output.html")
     # pd.set_option('display.max_columns', 30)
 
     # print(type(trades))
