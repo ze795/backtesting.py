@@ -78,24 +78,37 @@ class Boll_TL(Strategy):
     def init(self):
         self.mean, self.upper, self.lower = self.I(BBANDS, self.data.High, self.data.Low, self.data.Close)
         self.atr, self.tr = self.I(ATR, self.data.High, self.data.Low, self.data.Close, 14)
+        self.ma60 = self.I(SMA, self.data.Close, 60) # or EMA
+        self.ma20 = self.I(SMA, self.data.Close, 20) # or EMA
+        self.ma5 = self.I(SMA, self.data.Close, 5) # or EMA
 
         # 5K变化多少算小呢？作为一个参数要搜索。5K内的abs(max-min)
-        self.flat_threshold = 2 # 过去5K如果角度很小，就随机上下开单。如果角度很大，要等到角度变小再开。
+        self.flat_threshold = 100 # 过去5K如果角度很小，就随机上下开单。如果角度很大，要等到角度变小再开。
         self.flat_window = 5 # 5~10
+        self.ma_len = 30
 
+    def trend(self):
+        uping  =  all(self.ma5[-i] >= self.ma20[-i] for i in range(1, 10))
+        downing  =  all(self.ma5[-i] <= self.ma20[-i] for i in range(1, 10))
+        return uping or downing
+        # return 0
 
     def flat(self):
         past_max = max(self.mean[-self.flat_window:])
         past_min = min(self.mean[-self.flat_window:])
         range_max = abs(past_max - past_min) # 窗口内波动太大不做
         angle_max = abs(self.mean[-self.flat_window] - self.mean[-1]) # 前后变化太大不做，说明走了单边突破了
-        if range_max < self.flat_threshold:
-            if self.mean[-self.flat_window] > self.mean[-1]:
+        
+        uping_num = sum([self.ma20[-i] > self.ma60[-i] for i in range(1, self.ma_len)])
+        downing_num = sum([self.ma20[-i] < self.ma60[-i] for i in range(1, self.ma_len)])
+        
+        if range_max < self.flat_threshold and not self.trend():
+            if uping_num >= downing_num:
                 # print("flat:1 ", self.mean[-self.flat_window], self.mean[-1], range_max)
-                return -1
+                return 1 # downing
             else:
                 # print("flat: -1 ", self.mean[-self.flat_window], self.mean[-1], range_max)
-                return 1
+                return -1
 
         return 0
 
@@ -104,40 +117,52 @@ class Boll_TL(Strategy):
             return
         # self.handle_ops()
         limit = None
+        tp = None
         cur_mean = self.mean[-1]
         cur_lower = self.lower[-1]
         cur_upper = self.upper[-1]
-        cur_index = self.data.index[-1]
-        cur_up = self.data.Close[-1] > self.data.Open[-1]
-        cur_down = self.data.Close[-1] < self.data.Open[-1]
+        # cur_index = self.data.index[-1]
+        cur_index = len(self.data)
+        box = abs(self.data.Close[-1] - self.data.Open[-1])
+        minmax = abs(self.data.High[-1] - self.data.Low[-1])
+        box_prop = box / minmax
+        pbtm = box_prop < 0.3
+        cur_up = self.data.Close[-1] > self.data.Open[-1] and pbtm
+        cur_down = self.data.Close[-1] < self.data.Open[-1] and pbtm
+        # if (box_prop > 0.8) and (vol > self.v3[-1] * 1.2) and (self.tr[-1] > 1.5 * self.atr[-1]) and not self.position:
+        # print(cur_index)
 
         if self.position:
             # if we close pos?
-            cur_index = self.data.index[-1]
             for trade in self.trades:
                 # if trade.is_long:
+                
                 if trade:
-                    if trade.is_long and cur_upper > trade.entry_price:
-                        trade.tp = cur_upper
-                        # print(0, 1,  cur_upper, trade.entry_price)
-                    elif trade.is_short and cur_lower < trade.entry_price:
-                        trade.tp = cur_lower
-                        # print(0, -1, cur_upper, trade.entry_price)
-
+                    in_index, _ = trade.tag
+                    if (cur_index - in_index) > 10:
+                        if trade.is_long :
+                            trade.tp = max(trade.entry_price, trade.tp - 1)
+                            # print(0, 1,  cur_upper, trade.entry_price)
+                        elif trade.is_short:
+                            trade.tp = min(trade.entry_price, trade.tp + 1)
+                            # print(0, -1, cur_upper, trade.entry_price)
+        
         if self.position:
             return
         direction = self.flat()
         if direction == 1 and cur_up:
             # limit = cur_mean
             limit = cur_lower
-            stop_p = limit - 1.0 * (cur_mean - cur_lower)
-            self.buy(size=1, sl=stop_p, limit=limit, tag=(cur_index, 0))
+            stop_p = limit - 1.5 * (cur_mean - cur_lower)
+            tp = cur_mean
+            self.buy(size=1, sl=stop_p, limit=limit, tp=tp, tag=(cur_index, 0))
             # print(1, cur_upper, cur_mean, cur_lower, cur_index, stop_p)
         elif direction == -1 and cur_down:
             # limit = cur_mean
             limit = cur_upper
-            stop_p = limit + 1.0 *  (cur_upper - cur_mean)
-            self.sell(size=1, sl=stop_p, limit=limit, tag=(cur_index, 0))
+            stop_p = limit + 1.5 *  (cur_upper - cur_mean)
+            tp = cur_mean
+            self.sell(size=1, sl=stop_p, limit=limit, tp=tp, tag=(cur_index, 0))
             # print(-1, cur_upper, cur_mean, cur_lower, cur_index, stop_p)
         else:
             return
@@ -162,10 +187,14 @@ def correct_diff_csv(data):
 if __name__ == '__main__':
     warnings.filterwarnings("ignore", category=UserWarning)
     # CY_1M = _read_file('RB0_dayK.csv')[:]
-    CY_1M = _read_file('CY_1M.csv')[-10000:]
-    # CY_1M = _read_file('SP2509-2511_5m.csv')[-100:]
+    # CY_1M = _read_file('SP0_1m.csv')
+    pwd = os.path.dirname(os.path.abspath(__file__))
+    filename = "EB2508-2509.csv"
+    # filename = "CY_1M.csv"
+    filename = "RB0_5m.csv"
+    CY_1M = _read_file(pwd + '/../../data/' + filename)[-20000:]
     # print(CY_1M)
-    # CY_1M = correct_diff_csv(CY_1M)[-1000:]
+    # CY_1M = correct_diff_csv(CY_1M)
     # print(CY_1M)
 
     bt = Backtest(CY_1M, Boll_TL, hedging=True)
