@@ -78,18 +78,26 @@ class Boll_TL(Strategy):
     def init(self):
         self.mean, self.upper, self.lower = self.I(BBANDS, self.data.High, self.data.Low, self.data.Close)
         self.atr, self.tr = self.I(ATR, self.data.High, self.data.Low, self.data.Close, 14)
+        self.m20 = self.I(SMA, self.data.Close, 20) # or EMA
+        self.m5 = self.I(SMA, self.data.Close, 5) # or EMA
 
         # 5K变化多少算小呢？作为一个参数要搜索。5K内的abs(max-min)
         self.flat_threshold = 2 # 过去5K如果角度很小，就随机上下开单。如果角度很大，要等到角度变小再开。
         self.flat_window = 5 # 5~10
+        self.ma_len = 10
 
+    def trend(self):
+        uping = all(self.m5[-i] > self.m20[-i] for i in range(1, self.ma_len))
+        downing = all(self.m5[-i] < self.m20[-i] for i in range(1, self.ma_len))
+
+        return uping or downing
 
     def flat(self):
         past_max = max(self.mean[-self.flat_window:])
         past_min = min(self.mean[-self.flat_window:])
         range_max = abs(past_max - past_min) # 窗口内波动太大不做
         angle_max = abs(self.mean[-self.flat_window] - self.mean[-1]) # 前后变化太大不做，说明走了单边突破了
-        if range_max < self.flat_threshold:
+        if range_max < self.flat_threshold and not self.trend() :
             if self.mean[-self.flat_window] > self.mean[-1]:
                 # print("flat:1 ", self.mean[-self.flat_window], self.mean[-1], range_max)
                 return -1
@@ -162,8 +170,8 @@ def correct_diff_csv(data):
 if __name__ == '__main__':
     warnings.filterwarnings("ignore", category=UserWarning)
     # CY_1M = _read_file('RB0_dayK.csv')[:]
-    CY_1M = _read_file('CY_1M.csv')[-10000:]
-    # CY_1M = _read_file('SP2509-2511_5m.csv')[-100:]
+    CY_1M = _read_file('CY_1M.csv')
+    # CY_1M = _read_file('SP2509-2511_5m.csv')
     # print(CY_1M)
     # CY_1M = correct_diff_csv(CY_1M)[-1000:]
     # print(CY_1M)
